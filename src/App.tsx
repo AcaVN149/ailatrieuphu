@@ -13,6 +13,8 @@ import { historyService } from "./services/historyService";
 import { PhoneModal, AudienceModal, ExpertModal } from "./components/lifelines/LifelineModals";
 import { formatChemicalFormula } from "./lib/utils";
 import { Leaderboard } from "./components/Leaderboard";
+import { auth, signInWithGoogle } from "./lib/firebase";
+import { onAuthStateChanged, User as FirebaseUser, signOut } from "firebase/auth";
 
 const quizService = QuizService.getInstance();
 
@@ -21,6 +23,15 @@ export default function App() {
     const saved = localStorage.getItem("playerInfo");
     return saved ? JSON.parse(saved) : null;
   });
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsubscribe();
+  }, []);
+
   const [regForm, setRegForm] = useState({ name: "", grade: "" });
   const [status, setStatus] = useState<"registration" | "menu" | "history" | "leaderboard" | "loading" | "playing" | "end">(() => {
     return localStorage.getItem("playerInfo") ? "menu" : "registration";
@@ -70,9 +81,16 @@ export default function App() {
     return () => clearInterval(interval);
   }, [status, activeLifeline]);
 
-  const saveGameRecord = useCallback(() => {
+  const handleSignOut = async () => {
+    await signOut(auth);
+    localStorage.removeItem("playerInfo");
+    setPlayerInfo(null);
+    setStatus("registration");
+  };
+
+  const saveGameRecord = useCallback(async () => {
     if (!playerInfo || !selectedTopic || !selectedDifficulty) return;
-    const topicLabel = selectedTopic === 'dai-cuong' ? 'Đại cương' : selectedTopic === 'hydrocarbon' ? 'Hydrocarbon' : 'Dẫn xuất';
+    const topicLabel = selectedTopic === 'dai-cuong' ? 'Đại cương' : selectedTopic === 'hydrocarbon' ? 'Hydrocarbon' : 'Dẫn xuất Hydrocarbon';
     const levelLabel = selectedDifficulty === 'easy' ? 'Nhận biết' : selectedDifficulty === 'medium' ? 'Thông hiểu' : selectedDifficulty === 'hard' ? 'Vận dụng' : 'Tổng hợp';
     
     const finalWinnings = isCorrect === false ? previousWinnings : winnings;
@@ -95,6 +113,7 @@ export default function App() {
       totalQuestions: currentLadder.length,
       timeSpent: formatTime(gameTime),
       durationSeconds: gameTime,
+      uid: user?.uid,
       wrongQuestion: isCorrect === false ? (question?.question || null) : "Không có",
       wrongAnswerChosen: isCorrect === false && selectedIdx !== null ? String.fromCharCode(65 + (selectedIdx ?? 0)) : "-",
       correctAnswer: isCorrect === false && question ? String.fromCharCode(65 + question.answer) : "-",
@@ -107,8 +126,8 @@ export default function App() {
         explanation: question.explanation
       } : null
     };
-    historyService.saveGameRecord(record);
-  }, [playerInfo, selectedTopic, selectedDifficulty, isCorrect, previousWinnings, winnings, correctCount, currentLadder, gameTime, question, selectedIdx]);
+    await historyService.saveGameRecord(record);
+  }, [playerInfo, selectedTopic, selectedDifficulty, isCorrect, previousWinnings, winnings, correctCount, currentLadder, gameTime, question, selectedIdx, user]);
 
   useEffect(() => {
     if (status === "end" && playerInfo) {
@@ -250,6 +269,52 @@ export default function App() {
                  <h2 className="text-3xl font-black text-[#FFD700] uppercase italic tracking-tighter">AI LÀ TRIỆU PHÚ</h2>
                  <p className="text-blue-300 text-[10px] font-black uppercase tracking-[0.2em]">Chemistry Edition</p>
               </div>
+
+              {/* Google Login Section */}
+              <div className="space-y-4">
+                <p className="text-blue-300/60 text-[9px] font-black uppercase tracking-widest text-center">
+                  {user ? "Đã kết nối tài khoản" : "Kết nối để đồng bộ bảng xếp hạng"}
+                </p>
+                
+                {!user ? (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await signInWithGoogle();
+                      } catch (err) {
+                        alert("Lỗi đăng nhập Google. Vui lòng thử lại.");
+                      }
+                    }}
+                    className="w-full py-4 bg-white text-gray-900 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-gray-100 transition-all border-b-4 border-gray-300 active:translate-y-1 active:border-b-0 text-sm"
+                  >
+                    <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+                    ĐĂNG NHẬP GOOGLE
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl overflow-hidden">
+                    {user.photoURL ? (
+                      <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-blue-400 shrink-0" alt="Avatar" />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-blue-400 flex items-center justify-center text-white font-black shrink-0">
+                        {user.displayName?.charAt(0) || "U"}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-black text-sm truncate">{user.displayName}</p>
+                      <p className="text-blue-300/60 text-[10px] truncate">{user.email}</p>
+                    </div>
+                    <button 
+                      onClick={() => signOut(auth)}
+                      className="p-2 hover:bg-red-500/10 text-red-400 rounded-lg transition-colors shrink-0"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="h-px bg-white/5" />
+
               <form onSubmit={handleRegister} className="space-y-6">
                 <div className="space-y-1">
                   <label className="text-[10px] uppercase font-black text-blue-400 tracking-widest ml-1">Họ và tên</label>
@@ -475,7 +540,7 @@ export default function App() {
                   <div className="flex items-center gap-1.5 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-lg min-w-0 flex-1 md:max-w-[45%]">
                     <BookOpen className="w-3 md:w-3.5 h-3 md:h-3.5 text-blue-400 shrink-0" />
                     <span className="text-[8px] md:text-[9px] font-black text-blue-300 uppercase truncate">
-                       {selectedTopic === 'dai-cuong' ? 'Đại cương' : selectedTopic === 'hydrocarbon' ? 'Hydrocarbon' : 'Dẫn xuất'}
+                       {selectedTopic === 'dai-cuong' ? 'Đại cương' : selectedTopic === 'hydrocarbon' ? 'Hydrocarbon' : 'Dẫn xuất Hydrocarbon'}
                     </span>
                   </div>
                 </div>

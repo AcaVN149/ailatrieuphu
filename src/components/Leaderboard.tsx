@@ -30,27 +30,69 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
   const [activeTopic, setActiveTopic] = useState<Topic>("dai-cuong");
   const [activeLevel, setActiveLevel] = useState<Difficulty>("easy");
   const [history, setHistory] = useState<GameRecord[]>([]);
+  const [globalHistory, setGlobalHistory] = useState<GameRecord[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setHistory(historyService.getHistory());
   }, []);
 
+  useEffect(() => {
+    const fetchGlobal = async () => {
+      setLoading(true);
+      const records = await historyService.getGlobalLeaderboard(activeTopic, activeLevel);
+      setGlobalHistory(records);
+      setLoading(false);
+    };
+    fetchGlobal();
+  }, [activeTopic, activeLevel]);
+
+  // Combined History (Local + Global)
+  const combinedHistory = useMemo(() => {
+    const map = new Map<string, GameRecord>();
+    
+    // Add local records first
+    history.forEach(r => map.set(r.id, r));
+    
+    // Add global records (overwrite if ID matches, but doc IDs are different from timestamp IDs usually)
+    globalHistory.forEach(r => map.set(r.id, r));
+    
+    return Array.from(map.values());
+  }, [history, globalHistory]);
+
   // Filter, Group by Player (Name+Class), and Sort
   const processedRecords = useMemo(() => {
-    // 1. Filter by current topic and level
-    const topicLabel = TOPICS.find(t => t.id === activeTopic)?.label;
-    const levelLabel = LEVELS.find(l => l.id === activeLevel)?.label;
+    // 1. Get current topic and level labels for fallback matching
+    const currentTopicObj = TOPICS.find(t => t.id === activeTopic);
+    const currentLevelObj = LEVELS.find(l => l.id === activeLevel);
+    
+    const topicLabel = currentTopicObj?.label;
+    const levelLabel = currentLevelObj?.label;
 
-    const relevant = history.filter(r => 
-        (r.topicId === activeTopic || r.topic === topicLabel) && 
-        (r.levelId === activeLevel || r.gameMode === levelLabel)
-    );
+    const relevant = combinedHistory.filter(r => {
+        // Robust topic matching: by ID or by Label (including partial/alternate labels)
+        const topicMatch = 
+            r.topicId === activeTopic || 
+            r.topic === topicLabel ||
+            (activeTopic === 'dan-xuat' && (r.topic === 'Dẫn xuất' || r.topic === 'Dẫn xuất Hydrocarbon'));
+            
+        // Robust level matching: by ID or by Label
+        const levelMatch = 
+            r.levelId === activeLevel || 
+            r.gameMode === levelLabel;
 
-    // 2. Group by Player (Name + Class) and find BEST record
+        return topicMatch && levelMatch;
+    });
+
+    // 2. Group by Player (Name + Class) and find BEST record for THIS specific topic/level
     const playerBestMap: Record<string, GameRecord> = {};
 
     relevant.forEach(record => {
-        const key = `${record.playerName.trim().toLowerCase()}_${record.playerClass.trim().toLowerCase()}`;
+        // Clean name and class for consistent lookup
+        const name = (record.playerName || "Vô danh").trim();
+        const grade = (record.playerClass || "Không rõ lớp").trim();
+        const key = `${name.toLowerCase()}_${grade.toLowerCase()}`;
+        
         const existing = playerBestMap[key];
 
         if (!existing) {
@@ -74,7 +116,7 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
         }
         return a.durationSeconds - b.durationSeconds;
     });
-  }, [history, activeTopic, activeLevel]);
+  }, [combinedHistory, activeTopic, activeLevel]);
 
   return (
     <div className="flex-1 flex flex-col space-y-6 md:space-y-8 h-full animate-in fade-in duration-700 pt-4 pb-20 px-4">
@@ -139,7 +181,13 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
 
             {/* Records List */}
             <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                <AnimatePresence mode="wait">
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center py-32 space-y-4">
+                        <div className="w-12 h-12 border-4 border-[#FFD700] border-t-transparent rounded-full animate-spin" />
+                        <p className="text-blue-300 font-black uppercase tracking-widest text-xs">Đang tải bảng xếp hạng...</p>
+                    </div>
+                ) : (
+                    <AnimatePresence mode="wait">
                     <motion.div 
                         key={`${activeTopic}-${activeLevel}`}
                         initial={{ opacity: 0, x: 20 }}
@@ -230,6 +278,7 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
                         )}
                     </motion.div>
                 </AnimatePresence>
+                )}
             </div>
         </div>
       </div>

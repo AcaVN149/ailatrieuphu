@@ -1,0 +1,38 @@
+{
+  "entities": {
+    "GameRecord": {
+      "title": "Game Record",
+      "description": "A record of a completed quiz game",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "playerName": { "type": "string" },
+        "playerClass": { "type": "string" },
+        "topicId": { "type": "string" },
+        "levelId": { "type": "string" },
+        "topic": { "type": "string" },
+        "gameMode": { "type": "string" },
+        "prizeMoney": { "type": "string" },
+        "prizeValue": { "type": "number" },
+        "correctAnswers": { "type": "string" },
+        "correctCount": { "type": "number" },
+        "totalQuestions": { "type": "number" },
+        "timeSpent": { "type": "string" },
+        "durationSeconds": { "type": "number" },
+        "uid": { "type": "string" },
+        "wrongQuestion": { "type": "string" },
+        "wrongAnswerChosen": { "type": "string" },
+        "correctAnswer": { "type": "string" },
+        "explanation": { "type": "string" }
+      },
+      "required": ["playerName", "playerClass", "topicId", "levelId", "correctCount", "durationSeconds"]
+    }
+  },
+  "firestore": {
+    "records/{recordId}": {
+      "schema": "GameRecord",
+      "description": "Collection of all game records for global leaderboard"
+    }
+  }
+}

@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true);
+    }
+
+    // Schema Validation for GameRecord
+    function isValidGameRecord(data) {
+      return data.keys().hasAll(['playerName', 'playerClass', 'topicId', 'levelId', 'correctCount', 'durationSeconds', 'date', 'uid', 'createdAt'])
+        && data.playerName is string && data.playerName.size() > 0 && data.playerName.size() <= 100
+        && data.playerClass is string && data.playerClass.size() > 0 && data.playerClass.size() <= 60
+        && data.topicId is string && data.topicId.size() <= 50
+        && data.levelId is string && data.levelId.size() <= 20
+        && data.correctCount is int && data.correctCount >= 0 && data.correctCount <= 30
+        && data.durationSeconds is int && data.durationSeconds >= 0
+        && data.date is string && data.date.size() <= 50
+        && data.uid is string && data.uid == request.auth.uid
+        && data.createdAt == request.time
+        && (data.keys().size() <= 30);
+    }
+
+    // --- Collections ---
+
+    match /records/{recordId} {
+      // Rankings are global
+      allow read: if isSignedIn();
+      
+      // Create record
+      allow create: if isSignedIn() 
+        && isValidId(recordId)
+        && isValidGameRecord(incoming());
+
+      // No updates for integrity
+      allow update: if false;
+
+      // Only owner can delete (e.g. if they want to hide a bad run)
+      allow delete: if isSignedIn() && existing().uid == request.auth.uid;
+    }
+  }
+}

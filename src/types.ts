@@ -109,6 +109,7 @@ export interface GameRecord {
   totalQuestions: number;
   timeSpent: string;
   durationSeconds: number; // For sorting
+  uid?: string; // Firebase Auth UID
   // Giữ lại các trường cũ để tương thích ngược nếu cần, 
   // nhưng khuyến khích dùng wrongQuestionDetails cho giao diện mới
   wrongQuestion: string | null;
