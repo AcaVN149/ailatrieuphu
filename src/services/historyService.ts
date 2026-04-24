@@ -5,7 +5,7 @@
 
 import { GameRecord } from "../types";
 import { db, auth } from "../lib/firebase";
-import { collection, addDoc, getDocs, query, orderBy, limit, where, Timestamp } from "firebase/firestore";
+import { collection, getDocs, query, limit, where, serverTimestamp, setDoc, doc } from "firebase/firestore";
 
 const HISTORY_KEY = "millionaire_history";
 const MAX_RECORDS = 5000; // Large limit for "unlimited" feel
@@ -62,16 +62,15 @@ export const historyService = {
 
       // 2. Save to Firestore if user is authenticated
       if (auth.currentUser) {
-        // We use setDoc with a specific ID to prevent duplicates on cloud if synced multiple times
-        // The record.id is usually Date.now().toString()
+        // We use setDoc with a specific ID to ensure consistency
         const docId = record.id || `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const docRef = await addDoc(collection(db, "records"), {
+        await setDoc(doc(db, "records", docId), {
           ...record,
-          id: docId, // Ensure it has an ID
+          id: docId,
           uid: auth.currentUser.uid,
-          createdAt: Timestamp.now()
+          createdAt: serverTimestamp()
         }).catch(err => handleFirestoreError(err, 'create', 'records'));
-        return docRef;
+        return { id: docId };
       }
     } catch (error) {
       console.error("Failed to save game record:", error);
@@ -89,10 +88,12 @@ export const historyService = {
     console.log(`Syncing ${unsynced.length} records to cloud...`);
     for (const record of unsynced) {
       try {
-        await addDoc(collection(db, "records"), {
+        const docId = record.id || `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await setDoc(doc(db, "records", docId), {
           ...record,
+          id: docId,
           uid: auth.currentUser.uid,
-          createdAt: Timestamp.now()
+          createdAt: serverTimestamp()
         });
         // Update local record to mark it as synced
         record.uid = auth.currentUser.uid;
@@ -106,19 +107,21 @@ export const historyService = {
 
   getGlobalLeaderboard: async (topicId: string, levelId: string): Promise<GameRecord[]> => {
     try {
+      // Fetch all recent records and filter in-memory to be resilient to field name changes (topicId vs topic)
+      // and to avoid composite index requirements during development.
       const q = query(
         collection(db, "records"),
-        where("topicId", "==", topicId),
-        where("levelId", "==", levelId),
-        orderBy("correctCount", "desc"),
-        orderBy("durationSeconds", "asc"),
-        limit(50)
+        limit(300)
       );
 
       const querySnapshot = await getDocs(q).catch(err => handleFirestoreError(err, 'list', 'records'));
       const records: GameRecord[] = [];
       querySnapshot.forEach((doc) => {
-        records.push({ id: doc.id, ...doc.data() } as GameRecord);
+        const data = doc.data();
+        records.push({ 
+          id: doc.id, // Primary ID from document
+          ...data 
+        } as GameRecord);
       });
 
       return records;

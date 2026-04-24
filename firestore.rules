@@ -45,10 +45,10 @@ service cloud.firestore {
     // --- Collections ---
 
     match /records/{recordId} {
-      // Rankings are global
-      allow read: if isSignedIn();
+      // Rankings are global - allowing anyone to read
+      allow read: if true;
       
-      // Create record
+      // Create record - still requires sign-in for identity integrity
       allow create: if isSignedIn() 
         && isValidId(recordId)
         && isValidGameRecord(incoming());

@@ -272,9 +272,17 @@ export default function App() {
 
               {/* Google Login Section */}
               <div className="space-y-4">
-                <p className="text-blue-300/60 text-[9px] font-black uppercase tracking-widest text-center">
-                  {user ? "Đã kết nối tài khoản" : "Kết nối để đồng bộ bảng xếp hạng"}
-                </p>
+                <div className="flex items-center justify-between">
+                  <p className="text-blue-300/60 text-[9px] font-black uppercase tracking-widest">
+                    {user ? "Đã kết nối tài khoản" : "Kết nối để đồng bộ bảng xếp hạng"}
+                  </p>
+                  {user && (
+                    <div className="flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                      <span className="text-[8px] font-black text-green-400 uppercase">Cloud Sync ON</span>
+                    </div>
+                  )}
+                </div>
                 
                 {!user ? (
                   <button
@@ -283,20 +291,22 @@ export default function App() {
                         await signInWithGoogle();
                         await historyService.syncLocalHistory();
                       } catch (err: any) {
+                        console.error("Login error:", err);
                         if (err.code === 'auth/unauthorized-domain') {
-                          alert("Lỗi: Tên miền này chưa được cấp phép trong Firebase Console. Vui lòng thêm domain vào Authorized Domains.");
+                          const domain = window.location.hostname;
+                          alert(`Lỗi: Tên miền "${domain}" chưa được cấp phép.\n\nBạn cần vào Firebase Console > Authentication > Settings > Authorized Domains và thêm "${domain}" vào danh sách.`);
                         } else {
                           alert("Lỗi đăng nhập Google. Vui lòng thử lại.");
                         }
                       }
                     }}
-                    className="w-full py-4 bg-white text-gray-900 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-gray-100 transition-all border-b-4 border-gray-300 active:translate-y-1 active:border-b-0 text-sm"
+                    className="w-full py-4 bg-white text-gray-900 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-gray-100 transition-all border-b-4 border-gray-300 active:translate-y-1 active:border-b-0 text-sm group"
                   >
-                    <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+                    <img src="https://www.google.com/favicon.ico" className="w-5 h-5 group-hover:scale-110 transition-transform" alt="Google" />
                     ĐĂNG NHẬP GOOGLE
                   </button>
                 ) : (
-                  <div className="flex items-center gap-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl overflow-hidden">
+                  <div className="flex items-center gap-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl overflow-hidden backdrop-blur-sm">
                     {user.photoURL ? (
                       <img src={user.photoURL} className="w-10 h-10 rounded-full border-2 border-blue-400 shrink-0" alt="Avatar" />
                     ) : (

@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Trophy, Clock, Target, CreditCard, ChevronLeft, Award, Star, Trash2 } from "lucide-react";
+import { Trophy, Clock, Target, CreditCard, ChevronLeft, Award, Star, Trash2, RotateCcw } from "lucide-react";
 import { GameRecord, Topic, Difficulty } from "../types";
 import { historyService } from "../services/historyService";
 
@@ -81,16 +81,20 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
 
     const relevant = combinedHistory.filter(r => {
         // Robust topic matching: by ID or by Label (including partial/alternate labels)
+        const topicIdNormalized = (r.topicId || "").toLowerCase();
+        const levelIdNormalized = (r.levelId || "").toLowerCase();
+        
         const topicMatch = 
-            r.topicId === activeTopic || 
+            topicIdNormalized === activeTopic.toLowerCase() || 
             r.topic === topicLabel ||
             (activeTopic === 'dan-xuat' && (r.topic === 'Dẫn xuất' || r.topic === 'Dẫn xuất Hydrocarbon'));
             
         // Robust level matching: by ID or by Label
         const levelMatch = 
-            r.levelId === activeLevel || 
+            levelIdNormalized === activeLevel.toLowerCase() || 
             r.gameMode === levelLabel;
 
+        // If one of the primary ID fields matches, we consider it a match
         return topicMatch && levelMatch;
     });
 
@@ -146,8 +150,21 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
         </div>
         
         <div className="flex items-center gap-3 px-6 py-3 bg-blue-600/10 border border-blue-500/20 rounded-full">
-            <Star className="w-5 h-5 text-[#FFD700] fill-[#FFD700]" />
-            <span className="text-xs font-black text-blue-200 uppercase tracking-widest">Thành tích tốt nhất theo người chơi</span>
+            <div className="flex items-center gap-2">
+              <div className={`w-1.5 h-1.5 rounded-full ${loading ? 'bg-yellow-400 animate-pulse' : 'bg-green-500'}`} />
+              <span className="text-[10px] font-black text-blue-200 uppercase tracking-widest">
+                {loading ? 'Đang cập nhật...' : 'Dữ liệu trực tuyến'}
+              </span>
+            </div>
+            <div className="w-px h-4 bg-white/10 mx-1" />
+            <button 
+              onClick={() => fetchGlobal()}
+              disabled={loading}
+              className="p-1 hover:bg-white/10 rounded-lg transition-colors"
+              title="Tải lại dữ liệu"
+            >
+              <RotateCcw className={`w-4 h-4 text-blue-300 ${loading ? 'animate-spin' : ''}`} />
+            </button>
         </div>
       </div>
 
