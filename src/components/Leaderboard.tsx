@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Trophy, Clock, Target, CreditCard, ChevronLeft, Award, Star } from "lucide-react";
+import { Trophy, Clock, Target, CreditCard, ChevronLeft, Award, Star, Trash2 } from "lucide-react";
 import { GameRecord, Topic, Difficulty } from "../types";
 import { historyService } from "../services/historyService";
 
@@ -33,19 +33,29 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
   const [globalHistory, setGlobalHistory] = useState<GameRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     setHistory(historyService.getHistory());
   }, []);
 
-  useEffect(() => {
-    const fetchGlobal = async () => {
-      setLoading(true);
+  const fetchGlobal = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
       const records = await historyService.getGlobalLeaderboard(activeTopic, activeLevel);
       setGlobalHistory(records);
+    } catch (err: any) {
+      console.error("Leaderboard fetch error:", err);
+      setError("Không thể tải dữ liệu từ máy chủ. Vui lòng kiểm tra cấu hình Firestore.");
+    } finally {
       setLoading(false);
-    };
-    fetchGlobal();
+    }
   }, [activeTopic, activeLevel]);
+
+  useEffect(() => {
+    fetchGlobal();
+  }, [fetchGlobal]);
 
   // Combined History (Local + Global)
   const combinedHistory = useMemo(() => {
@@ -185,6 +195,19 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
                     <div className="flex flex-col items-center justify-center py-32 space-y-4">
                         <div className="w-12 h-12 border-4 border-[#FFD700] border-t-transparent rounded-full animate-spin" />
                         <p className="text-blue-300 font-black uppercase tracking-widest text-xs">Đang tải bảng xếp hạng...</p>
+                    </div>
+                ) : error ? (
+                    <div className="flex flex-col items-center justify-center py-32 space-y-4 text-center">
+                        <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center">
+                            <Trash2 className="w-6 h-6 text-red-400" />
+                        </div>
+                        <p className="text-red-300 font-bold text-sm max-w-xs">{error}</p>
+                        <button 
+                            onClick={() => fetchGlobal()}
+                            className="px-4 py-2 bg-blue-500 text-white rounded-lg font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-colors"
+                        >
+                            Thử lại
+                        </button>
                     </div>
                 ) : (
                     <AnimatePresence mode="wait">

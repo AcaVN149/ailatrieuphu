@@ -54,13 +54,20 @@ export const historyService = {
     try {
       // 1. Save locally
       const existingHistory = historyService.getHistory();
-      const updatedHistory = [record, ...existingHistory].slice(0, MAX_RECORDS);
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+      // Avoid duplicate local records
+      if (!existingHistory.some(r => r.id === record.id)) {
+        const updatedHistory = [record, ...existingHistory].slice(0, MAX_RECORDS);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+      }
 
       // 2. Save to Firestore if user is authenticated
       if (auth.currentUser) {
+        // We use setDoc with a specific ID to prevent duplicates on cloud if synced multiple times
+        // The record.id is usually Date.now().toString()
+        const docId = record.id || `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         const docRef = await addDoc(collection(db, "records"), {
           ...record,
+          id: docId, // Ensure it has an ID
           uid: auth.currentUser.uid,
           createdAt: Timestamp.now()
         }).catch(err => handleFirestoreError(err, 'create', 'records'));
@@ -69,6 +76,32 @@ export const historyService = {
     } catch (error) {
       console.error("Failed to save game record:", error);
     }
+  },
+
+  syncLocalHistory: async () => {
+    if (!auth.currentUser) return;
+    const localHistory = historyService.getHistory();
+    // Only sync records that don't have a uid yet (locally created)
+    const unsynced = localHistory.filter(r => !r.uid);
+    
+    if (unsynced.length === 0) return;
+
+    console.log(`Syncing ${unsynced.length} records to cloud...`);
+    for (const record of unsynced) {
+      try {
+        await addDoc(collection(db, "records"), {
+          ...record,
+          uid: auth.currentUser.uid,
+          createdAt: Timestamp.now()
+        });
+        // Update local record to mark it as synced
+        record.uid = auth.currentUser.uid;
+      } catch (err) {
+        console.error("Sync error for record:", record.id, err);
+      }
+    }
+    // Save the updated local history (now with UIDs)
+    historyService.setHistory(localHistory);
   },
 
   getGlobalLeaderboard: async (topicId: string, levelId: string): Promise<GameRecord[]> => {

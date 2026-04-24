@@ -281,8 +281,13 @@ export default function App() {
                     onClick={async () => {
                       try {
                         await signInWithGoogle();
-                      } catch (err) {
-                        alert("Lỗi đăng nhập Google. Vui lòng thử lại.");
+                        await historyService.syncLocalHistory();
+                      } catch (err: any) {
+                        if (err.code === 'auth/unauthorized-domain') {
+                          alert("Lỗi: Tên miền này chưa được cấp phép trong Firebase Console. Vui lòng thêm domain vào Authorized Domains.");
+                        } else {
+                          alert("Lỗi đăng nhập Google. Vui lòng thử lại.");
+                        }
                       }
                     }}
                     className="w-full py-4 bg-white text-gray-900 rounded-2xl font-black flex items-center justify-center gap-3 hover:bg-gray-100 transition-all border-b-4 border-gray-300 active:translate-y-1 active:border-b-0 text-sm"
