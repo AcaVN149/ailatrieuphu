@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Trophy, Clock, Target, CreditCard, ChevronLeft, Award, Star, Trash2, RotateCcw } from "lucide-react";
+import { Trophy, Clock, Target, CreditCard, ChevronLeft, Award, Star, Trash2, RotateCcw, X, Calendar, AlertCircle } from "lucide-react";
 import { GameRecord, Topic, Difficulty } from "../types";
 import { historyService } from "../services/historyService";
 
@@ -32,8 +32,11 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
   const [history, setHistory] = useState<GameRecord[]>([]);
   const [globalHistory, setGlobalHistory] = useState<GameRecord[]>([]);
   const [loading, setLoading] = useState(false);
-
   const [error, setError] = useState<string | null>(null);
+
+  // Modal State
+  const [selectedPlayer, setSelectedPlayer] = useState<{ name: string; class: string } | null>(null);
+  const [playerHistory, setPlayerHistory] = useState<GameRecord[]>([]);
 
   useEffect(() => {
     setHistory(historyService.getHistory());
@@ -64,7 +67,7 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
     // Add local records first
     history.forEach(r => map.set(r.id, r));
     
-    // Add global records (overwrite if ID matches, but doc IDs are different from timestamp IDs usually)
+    // Add global records
     globalHistory.forEach(r => map.set(r.id, r));
     
     return Array.from(map.values());
@@ -72,7 +75,6 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
 
   // Filter, Group by Player (Name+Class), and Sort
   const processedRecords = useMemo(() => {
-    // 1. Get current topic and level labels for fallback matching
     const currentTopicObj = TOPICS.find(t => t.id === activeTopic);
     const currentLevelObj = LEVELS.find(l => l.id === activeLevel);
     
@@ -80,7 +82,6 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
     const levelLabel = currentLevelObj?.label;
 
     const relevant = combinedHistory.filter(r => {
-        // Robust topic matching: by ID or by Label (including partial/alternate labels)
         const topicIdNormalized = (r.topicId || "").toLowerCase();
         const levelIdNormalized = (r.levelId || "").toLowerCase();
         
@@ -89,20 +90,16 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
             r.topic === topicLabel ||
             (activeTopic === 'dan-xuat' && (r.topic === 'Dẫn xuất' || r.topic === 'Dẫn xuất Hydrocarbon'));
             
-        // Robust level matching: by ID or by Label
         const levelMatch = 
             levelIdNormalized === activeLevel.toLowerCase() || 
             r.gameMode === levelLabel;
 
-        // If one of the primary ID fields matches, we consider it a match
         return topicMatch && levelMatch;
     });
 
-    // 2. Group by Player (Name + Class) and find BEST record for THIS specific topic/level
     const playerBestMap: Record<string, GameRecord> = {};
 
     relevant.forEach(record => {
-        // Clean name and class for consistent lookup
         const name = (record.playerName || "Vô danh").trim();
         const grade = (record.playerClass || "Không rõ lớp").trim();
         const key = `${name.toLowerCase()}_${grade.toLowerCase()}`;
@@ -112,7 +109,6 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
         if (!existing) {
             playerBestMap[key] = record;
         } else {
-            // Compare results: correctCount desc, durationSeconds asc
             if (record.correctCount > existing.correctCount) {
                 playerBestMap[key] = record;
             } else if (record.correctCount === existing.correctCount) {
@@ -123,7 +119,6 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
         }
     });
 
-    // 3. Convert back to array and sort globally for ranking
     return Object.values(playerBestMap).sort((a, b) => {
         if (b.correctCount !== a.correctCount) {
             return b.correctCount - a.correctCount;
@@ -131,6 +126,45 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
         return a.durationSeconds - b.durationSeconds;
     });
   }, [combinedHistory, activeTopic, activeLevel]);
+
+  const handleShowPlayerHistory = (name: string, grade: string) => {
+    setSelectedPlayer({ name, class: grade });
+    
+    const currentTopicObj = TOPICS.find(t => t.id === activeTopic);
+    const currentLevelObj = LEVELS.find(l => l.id === activeLevel);
+    const topicLabel = currentTopicObj?.label;
+    const levelLabel = currentLevelObj?.label;
+
+    const playerRuns = combinedHistory.filter(r => {
+        const matchesIdentity = 
+            r.playerName?.trim().toLowerCase() === name.trim().toLowerCase() && 
+            r.playerClass?.trim().toLowerCase() === grade.trim().toLowerCase();
+        
+        if (!matchesIdentity) return false;
+
+        const topicIdNormalized = (r.topicId || "").toLowerCase();
+        const levelIdNormalized = (r.levelId || "").toLowerCase();
+        
+        const topicMatch = 
+            topicIdNormalized === activeTopic.toLowerCase() || 
+            r.topic === topicLabel ||
+            (activeTopic === 'dan-xuat' && (r.topic === 'Dẫn xuất' || r.topic === 'Dẫn xuất Hydrocarbon'));
+            
+        const levelMatch = 
+            levelIdNormalized === activeLevel.toLowerCase() || 
+            r.gameMode === levelLabel;
+
+        return topicMatch && levelMatch;
+    }).sort((a, b) => {
+        // Sort by date or id (timestamp) descending
+        const dateA = new Date(a.date || 0).getTime();
+        const dateB = new Date(b.date || 0).getTime();
+        if (dateA !== dateB) return dateB - dateA;
+        return Number(b.id) - Number(a.id);
+    });
+
+    setPlayerHistory(playerRuns);
+  };
 
   return (
     <div className="flex-1 flex flex-col space-y-6 md:space-y-8 h-full animate-in fade-in duration-700 pt-4 pb-20 px-4">
@@ -249,15 +283,16 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
                                     {processedRecords.map((r, idx) => {
                                         const isTop3 = idx < 3;
                                         return (
-                                            <div 
+                                            <button 
                                                 key={r.id} 
-                                                className={`grid grid-cols-1 md:grid-cols-12 items-center px-6 py-4 rounded-[1.5rem] border transition-all ${
+                                                onClick={() => handleShowPlayerHistory(r.playerName, r.playerClass)}
+                                                className={`w-full grid grid-cols-1 md:grid-cols-12 items-center px-6 py-4 rounded-[1.5rem] border transition-all text-left group cursor-pointer ${
                                                     idx === 0 
                                                     ? 'bg-[#FFD700]/10 border-[#FFD700]/30 shadow-[0_0_20px_rgba(255,215,0,0.1)]' 
-                                                    : 'bg-white/5 border-white/5 hover:border-white/10'
+                                                    : 'bg-white/5 border-white/5 hover:border-white/10 hover:bg-white/10'
                                                 }`}
                                             >
-                                                <div className="col-span-1 flex items-center md:block mb-2 md:mb-0">
+                                                <div className="col-span-1 flex items-center md:block mb-2 md:md-0">
                                                     <span className="md:hidden text-[10px] font-black text-blue-400 uppercase mr-3">Hạng:</span>
                                                     <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black ${
                                                         idx === 0 ? 'bg-gradient-to-br from-yellow-300 to-yellow-600 text-slate-950 scale-110 shadow-lg' : 
@@ -268,9 +303,9 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
                                                     </div>
                                                 </div>
 
-                                                <div className="col-span-5 flex items-center md:block mb-4 md:mb-0">
+                                                <div className="col-span-5 flex items-center md:block mb-4 md:md-0">
                                                     <div className="flex flex-col">
-                                                        <span className="font-black text-white text-lg tracking-tight truncate">{r.playerName}</span>
+                                                        <span className="font-black text-white text-lg tracking-tight truncate group-hover:text-[#FFD700] transition-colors">{r.playerName}</span>
                                                         <span className="text-[10px] text-blue-300 font-bold uppercase tracking-widest opacity-60">{r.playerClass}</span>
                                                     </div>
                                                 </div>
@@ -299,12 +334,17 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
                                                         <CreditCard className="w-3 h-3 text-blue-400" />
                                                         <span className="text-[10px] font-black text-blue-400 uppercase">Tiền thưởng:</span>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <span className="text-lg font-black text-[#FFD700] italic">{r.prizeMoney}</span>
-                                                        <span className="text-[8px] font-black text-[#FFD700]/60 ml-1 uppercase">vnđ</span>
+                                                    <div className="text-right flex items-center gap-4">
+                                                        <div className="hidden group-hover:block animate-in fade-in slide-in-from-right-2">
+                                                            <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest bg-blue-500/10 px-2 py-1 rounded-md border border-blue-500/20">Chi tiết</span>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <span className="text-lg font-black text-[#FFD700] italic">{r.prizeMoney}</span>
+                                                            <span className="text-[8px] font-black text-[#FFD700]/60 ml-1 uppercase">vnđ</span>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            </button>
                                         );
                                     })}
                                 </div>
@@ -322,6 +362,136 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
             </div>
         </div>
       </div>
+
+      {/* Player History Modal */}
+      <AnimatePresence>
+        {selectedPlayer && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedPlayer(null)}
+              className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
+            />
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-2xl bg-slate-900 border-2 border-[#FFD700]/30 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col max-h-[85vh]"
+            >
+              <div className="p-6 md:p-8 border-b border-white/5 bg-black/20 flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-black text-[#FFD700] italic uppercase tracking-tighter">LỊCH SỬ CHƠI</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-white font-black text-sm">{selectedPlayer.name}</span>
+                    <div className="w-1 h-1 rounded-full bg-blue-400/40" />
+                    <span className="text-blue-300/60 font-bold text-[10px] uppercase tracking-widest">{selectedPlayer.class}</span>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setSelectedPlayer(null)}
+                  className="p-2 hover:bg-white/10 rounded-xl transition-colors text-white/40 hover:text-white"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                <div>
+                   <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                     <Target className="w-3 h-3" />
+                     {TOPICS.find(t => t.id === activeTopic)?.label} • {LEVELS.find(l => l.id === activeLevel)?.label}
+                   </p>
+
+                   <div className="space-y-3">
+                      {playerHistory.map((run, runIdx) => (
+                        <div key={run.id || runIdx} className="bg-white/5 border border-white/5 rounded-2xl p-5 space-y-4 hover:border-white/10 transition-colors">
+                            <div className="flex flex-wrap items-center justify-between gap-4">
+                               <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                                     <Calendar className="w-5 h-5 text-blue-400" />
+                                  </div>
+                                  <div>
+                                     <p className="text-white font-black text-sm">{run.date}</p>
+                                     <p className="text-blue-300/60 text-[10px] uppercase font-bold tracking-widest">Thời gian thực hiện</p>
+                                  </div>
+                               </div>
+
+                               <div className="flex items-center gap-6">
+                                  <div className="text-center">
+                                     <p className="text-xl font-black text-[#FFD700] italic">{run.correctCount}<span className="text-xs text-white/30 not-italic ml-0.5">/{run.totalQuestions}</span></p>
+                                     <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest">Đúng</p>
+                                  </div>
+                                  <div className="text-center">
+                                     <p className="text-sm font-mono font-bold text-white/70">{run.timeSpent}</p>
+                                     <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest">Thời gian</p>
+                                  </div>
+                                  <div className="text-right">
+                                     <p className="text-lg font-black text-[#FFD700] italic">{run.prizeMoney}</p>
+                                     <p className="text-[9px] font-bold text-blue-400 uppercase tracking-widest">VNĐ</p>
+                                  </div>
+                               </div>
+                            </div>
+
+                            {/* Error Details if any */}
+                            {run.wrongQuestionDetails ? (
+                               <div className="bg-red-500/5 border border-red-500/10 rounded-xl p-4 mt-2">
+                                  <div className="flex items-start gap-3">
+                                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                                    <div className="space-y-3">
+                                       <p className="text-xs font-black text-red-300 uppercase tracking-widest">Câu hỏi dừng lại:</p>
+                                       <p className="text-sm text-white font-medium leading-relaxed">{run.wrongQuestionDetails.question}</p>
+                                       <div className="flex items-center gap-4 text-[11px] font-bold">
+                                          <div className="flex items-center gap-2">
+                                             <span className="text-red-400/60 uppercase">Đã chọn:</span>
+                                             <span className="text-red-400">{run.wrongQuestionDetails.chosenAnswer}</span>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                             <span className="text-green-400/60 uppercase">Đáp án đúng:</span>
+                                             <span className="text-green-400">{run.wrongQuestionDetails.correctAnswer}</span>
+                                          </div>
+                                       </div>
+                                       {run.wrongQuestionDetails.explanation && (
+                                          <div className="pt-2 border-t border-red-500/10">
+                                             <p className="text-[10px] text-white/40 leading-relaxed italic">{run.wrongQuestionDetails.explanation}</p>
+                                          </div>
+                                       )}
+                                    </div>
+                                  </div>
+                               </div>
+                            ) : run.wrongQuestion && run.wrongQuestion !== "Không có" ? (
+                                <div className="bg-red-500/5 border border-red-500/10 rounded-xl p-4 mt-2">
+                                    <div className="flex items-center gap-3">
+                                        <AlertCircle className="w-4 h-4 text-red-400" />
+                                        <p className="text-xs text-red-300 font-medium italic">Dấu mốc dừng lại: {run.wrongQuestion}</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="bg-green-500/5 border border-green-500/10 rounded-xl p-3 mt-2 flex items-center gap-3">
+                                    <Star className="w-4 h-4 text-green-400" />
+                                    <p className="text-green-300 font-black uppercase text-[10px] tracking-widest">Chinh phục tuyệt đối hoặc dừng cuộc chơi an toàn</p>
+                                </div>
+                            )}
+                        </div>
+                      ))}
+                   </div>
+                </div>
+              </div>
+
+              <div className="p-6 bg-black/40 border-t border-white/5 flex justify-end">
+                <button 
+                  onClick={() => setSelectedPlayer(null)}
+                  className="px-8 py-3 bg-white/5 hover:bg-white/10 text-white font-black uppercase text-xs tracking-widest rounded-xl transition-all border border-white/10"
+                >
+                  Đóng
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
