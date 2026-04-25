@@ -341,14 +341,9 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
                                                         <CreditCard className="w-3 h-3 text-blue-400" />
                                                         <span className="text-[10px] font-black text-blue-400 uppercase">Tiền thưởng:</span>
                                                     </div>
-                                                    <div className="text-right flex items-center gap-4">
-                                                        <div className="hidden group-hover:block animate-in fade-in slide-in-from-right-2">
-                                                            <span className="text-[9px] font-black text-blue-400 uppercase tracking-widest bg-blue-500/10 px-2 py-1 rounded-md border border-blue-500/20">Chi tiết</span>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <span className="text-lg font-black text-[#FFD700] italic">{r.prizeMoney}</span>
-                                                            <span className="text-[8px] font-black text-[#FFD700]/60 ml-1 uppercase">vnđ</span>
-                                                        </div>
+                                                    <div className="text-right">
+                                                        <span className="text-lg font-black text-[#FFD700] italic">{r.prizeMoney}</span>
+                                                        <span className="text-[8px] font-black text-[#FFD700]/60 ml-1 uppercase">vnđ</span>
                                                     </div>
                                                 </div>
                                             </button>
