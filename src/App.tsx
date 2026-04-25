@@ -675,10 +675,10 @@ function HistoryView({ onBack }: { onBack: () => void }) {
         }
     };
 
-    const executeDeleteSelected = () => {
+    const executeDeleteSelected = async () => {
         try {
+            await historyService.deleteRecords(selectedIds);
             const updatedHistory = records.filter(r => !selectedIds.includes(String(r.id)));
-            historyService.setHistory(updatedHistory);
             setRecords(updatedHistory);
             setSelectedIds([]);
             setConfirmDelete(null);
@@ -687,9 +687,9 @@ function HistoryView({ onBack }: { onBack: () => void }) {
         }
     };
 
-    const executeClearAll = () => {
+    const executeClearAll = async () => {
         try {
-            historyService.clearHistory();
+            await historyService.clearHistory();
             setRecords([]);
             setSelectedIds([]);
             setConfirmDelete(null);

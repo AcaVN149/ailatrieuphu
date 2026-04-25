@@ -7,6 +7,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Trophy, Clock, Target, CreditCard, ChevronLeft, Award, Star, Trash2, RotateCcw, X, Calendar, AlertCircle } from "lucide-react";
 import { GameRecord, Topic, Difficulty } from "../types";
+import { formatChemicalFormula } from "../lib/utils";
 import { historyService } from "../services/historyService";
 
 interface LeaderboardProps {
@@ -39,7 +40,13 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
   const [playerHistory, setPlayerHistory] = useState<GameRecord[]>([]);
 
   useEffect(() => {
-    setHistory(historyService.getHistory());
+    const refresh = () => {
+      setHistory(historyService.getHistory());
+    };
+    
+    refresh();
+    window.addEventListener('history-updated', refresh);
+    return () => window.removeEventListener('history-updated', refresh);
   }, []);
 
   const fetchGlobal = useCallback(async () => {
@@ -442,20 +449,20 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
                                     <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
                                     <div className="space-y-3">
                                        <p className="text-xs font-black text-red-300 uppercase tracking-widest">Câu hỏi dừng lại:</p>
-                                       <p className="text-sm text-white font-medium leading-relaxed">{run.wrongQuestionDetails.question}</p>
+                                       <p className="text-sm text-white font-medium leading-relaxed" dangerouslySetInnerHTML={{ __html: formatChemicalFormula(run.wrongQuestionDetails.question) }} />
                                        <div className="flex items-center gap-4 text-[11px] font-bold">
                                           <div className="flex items-center gap-2">
                                              <span className="text-red-400/60 uppercase">Đã chọn:</span>
-                                             <span className="text-red-400">{run.wrongQuestionDetails.chosenAnswer}</span>
+                                             <span className="text-red-400" dangerouslySetInnerHTML={{ __html: formatChemicalFormula(run.wrongQuestionDetails.options[run.wrongQuestionDetails.selectedIdx]) }} />
                                           </div>
                                           <div className="flex items-center gap-2">
                                              <span className="text-green-400/60 uppercase">Đáp án đúng:</span>
-                                             <span className="text-green-400">{run.wrongQuestionDetails.correctAnswer}</span>
+                                             <span className="text-green-400" dangerouslySetInnerHTML={{ __html: formatChemicalFormula(run.wrongQuestionDetails.options[run.wrongQuestionDetails.correctIdx]) }} />
                                           </div>
                                        </div>
                                        {run.wrongQuestionDetails.explanation && (
                                           <div className="pt-2 border-t border-red-500/10">
-                                             <p className="text-[10px] text-white/40 leading-relaxed italic">{run.wrongQuestionDetails.explanation}</p>
+                                             <p className="text-[10px] text-white/40 leading-relaxed italic" dangerouslySetInnerHTML={{ __html: formatChemicalFormula(run.wrongQuestionDetails.explanation) }} />
                                           </div>
                                        )}
                                     </div>
@@ -465,7 +472,7 @@ export function Leaderboard({ onBack }: LeaderboardProps) {
                                 <div className="bg-red-500/5 border border-red-500/10 rounded-xl p-4 mt-2">
                                     <div className="flex items-center gap-3">
                                         <AlertCircle className="w-4 h-4 text-red-400" />
-                                        <p className="text-xs text-red-300 font-medium italic">Dấu mốc dừng lại: {run.wrongQuestion}</p>
+                                        <p className="text-xs text-red-300 font-medium italic" dangerouslySetInnerHTML={{ __html: `Dấu mốc dừng lại: ${formatChemicalFormula(run.wrongQuestion || "")}` }} />
                                     </div>
                                 </div>
                             ) : (

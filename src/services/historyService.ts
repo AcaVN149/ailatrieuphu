@@ -5,7 +5,7 @@
 
 import { GameRecord } from "../types";
 import { db, auth } from "../lib/firebase";
-import { collection, getDocs, query, limit, where, serverTimestamp, setDoc, doc } from "firebase/firestore";
+import { collection, getDocs, query, limit, where, serverTimestamp, setDoc, doc, deleteDoc } from "firebase/firestore";
 
 const HISTORY_KEY = "millionaire_history";
 const MAX_RECORDS = 5000; // Large limit for "unlimited" feel
@@ -58,6 +58,7 @@ export const historyService = {
       if (!existingHistory.some(r => r.id === record.id)) {
         const updatedHistory = [record, ...existingHistory].slice(0, MAX_RECORDS);
         localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+        window.dispatchEvent(new Event('history-updated'));
       }
 
       // 2. Save to Firestore if user is authenticated
@@ -142,13 +143,46 @@ export const historyService = {
     }
   },
 
-  clearHistory: () => {
+  clearHistory: async () => {
+    const localHistory = historyService.getHistory();
     localStorage.removeItem(HISTORY_KEY);
+    
+    // If authenticated, we should ideally delete from cloud too if we want "no trash"
+    if (auth.currentUser) {
+      for (const record of localHistory) {
+        if (record.uid === auth.currentUser.uid) {
+          await deleteDoc(doc(db, "records", record.id)).catch(err => console.error("Cloud delete failed", err));
+        }
+      }
+    }
+    
+    window.dispatchEvent(new Event('history-updated'));
+  },
+
+  deleteRecords: async (ids: string[]) => {
+    const localHistory = historyService.getHistory();
+    const updatedHistory = localHistory.filter(r => !ids.includes(String(r.id)));
+    
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+
+    // Sync with cloud
+    if (auth.currentUser) {
+      for (const id of ids) {
+        // Find if it was a synced record
+        const record = localHistory.find(r => String(r.id) === id);
+        if (record && record.uid === auth.currentUser.uid) {
+          await deleteDoc(doc(db, "records", id)).catch(err => console.error("Cloud delete failed", err));
+        }
+      }
+    }
+
+    window.dispatchEvent(new Event('history-updated'));
   },
 
   setHistory: (history: GameRecord[]) => {
     try {
       localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_RECORDS)));
+      window.dispatchEvent(new Event('history-updated'));
     } catch (error) {
       console.error("Failed to update history:", error);
     }
